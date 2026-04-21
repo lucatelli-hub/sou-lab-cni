@@ -1,0 +1,25 @@
+global
+    daemon
+
+defaults
+    mode http
+    timeout connect 5s
+    timeout client  50s
+    timeout server  50s
+
+frontend main_front
+   # bind *:8080
+    bind *:8443 ssl crt /usr/local/etc/haproxy/cert/haproxy.pem
+
+    acl is_grafana path_beg /grafana
+    use_backend grafana_back if is_grafana
+
+    acl is_prometheus path_beg /prometheus
+    use_backend prometheus_back if is_prometheus
+
+backend grafana_back
+    http-request set-path %[path,regsub(^/grafana/,/)]
+    server grafana host.containers.internal:3000
+
+backend prometheus_back
+    server prometheus host.containers.internal:9090 check

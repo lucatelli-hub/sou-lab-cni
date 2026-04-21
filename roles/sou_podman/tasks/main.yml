@@ -1,0 +1,111 @@
+# 1. Crea la cartella per i certificati
+- name: Create certs directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/certs"
+    state: directory
+
+# 2. Genera il certificato
+- name: Generate Self-Signed Certificate
+  ansible.builtin.shell: 
+    cmd: >
+      openssl req -x509 -newkey rsa:2048 -nodes 
+      -keyout server.key -out server.crt -days 365 
+      -subj "/C=IT/ST=Italy/L=Rome/O=Sourcesense/CN=localhost"
+    chdir: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/certs"
+    creates: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/certs/server.crt"
+
+# 3. Crea il file .pem combinato che serve ad HAProxy
+- name: Create HAProxy PEM file
+  ansible.builtin.shell:
+    cmd: "cat server.crt server.key > haproxy.pem"
+    chdir: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/certs/"
+
+- name: Create base directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols"
+    state: directory
+    mode: '0755'
+
+- name: Create Prometheus directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/prometheus"
+    state: directory
+
+- name: Create Prometheus data directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/prometheus/data"
+    state: directory
+
+- name: Copy Prometheus config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/prometheus/prometheus.yml"
+
+- name: Create Grafana directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/grafana"
+    state: directory
+
+- name: Create HAProxy directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy"
+    state: directory
+
+- name: Copy HAProxy config
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/haproxy.cfg"
+
+- name: Run Prometheus container
+  containers.podman.podman_container:
+    name: prometheus
+    image: prom/prometheus:latest
+    state: started
+    recreate: true
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.external-url=/prometheus/"
+    volume:
+      - "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
+      - "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/prometheus/data:/prometheus"
+
+- name: Run Grafana container
+  containers.podman.podman_container:
+    name: grafana
+    image: grafana/grafana:latest
+    state: started
+    recreate: true
+    ports:
+      - "3000:3000"
+    volume:
+      - "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/grafana:/var/lib/grafana"
+    env:
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+
+# HAProxy con http
+#- name: Run HAProxy container
+#  containers.podman.podman_container:
+#    name: haproxy
+#    image: haproxy:latest
+#    state: started
+#    recreate: true
+#    ports:
+#      - "8080:8080"
+#    volume:
+#      - "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg"
+
+- name: Run HAProxy container
+  containers.podman.podman_container:
+    name: haproxy
+    image: haproxy:latest
+    state: started
+    recreate: true
+    ports:
+      - "8443:8443"
+    volumes:
+      - "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:Z"
+      - "{{ ansible_env.HOME }}/sou-lab-cni/containers_vols/haproxy/certs:/usr/local/etc/haproxy/cert:Z"

@@ -1,0 +1,13 @@
+# Ignora le cartelle generate dai container e da Ansible
+containers_vols/
+*.pem
+*.crt
+*.key
+*.retry
+
+# Ignora file di sistema macOS
+.DS_Store
+
+# Ignora cartelle virtualenv o temporanee
+__pycache__/
+.venv/
